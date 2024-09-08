@@ -1,0 +1,88 @@
+# set working directory to desktop
+setwd(file.path("C:", "Users", "name", "Desktop", "projname", "foldername", "projtitle"))
+
+# clean up the environment before starting
+rm(list = ls())
+library(slam)
+library(tm)
+library(SnowballC)
+library(proxy)
+library(igraph)
+library(igraphdata)
+
+#Get file path to folder "test" where the documents are located
+cname = file.path(".", "corpus")
+cname
+print(dir(cname))
+docs = Corpus(DirSource((cname)))
+print(summary(docs))
+
+#Tokenisation
+docs <- tm_map(docs, removeNumbers)
+docs <- tm_map(docs, removePunctuation)
+docs <- tm_map(docs, content_transformer(tolower))
+
+#Filter words
+docs <- tm_map(docs, removeWords, stopwords("english"))
+docs <- tm_map(docs, content_transformer(tolower))
+
+# Remove stop words and white space
+docs <- tm_map(docs, stripWhitespace)
+
+# Stem
+docs <- tm_map(docs, stemDocument, language = "english")
+
+#Create document term matrix
+dtm <- DocumentTermMatrix(docs)
+inspect(dtm[1:15, 1:4])
+freq <- colSums(as.matrix(dtm))
+length(freq)
+ord = order(freq)
+freq[head(ord)]
+freq[tail(ord)]
+head(table(freq), 10)
+tail(table(freq), 10)
+
+#Remove sparse term
+dim(dtm)
+dtms <- removeSparseTerms(dtm, 0.6666)
+inspect(dtms)
+
+dtms = as.matrix(dtms)
+write.csv(dtms, "a3.csv")
+
+# start with original document-term matrix
+dtmsx = as.matrix(dtms)
+
+# convert to binary matrix
+dtmsx = as.matrix((dtmsx > 0) + 0)
+
+# multiply binary matrix by its transpose
+ByAbsMatrix = dtmsx %*% t(dtmsx)
+
+# make leading diagonal zero
+diag(ByAbsMatrix) = 0
+
+ByAbs = graph_from_adjacency_matrix(ByAbsMatrix,mode = "undirected", weighted = TRUE)
+plot(ByAbs)
+
+# improved version of code from week 12--------------------------------------------------
+# Calculate centrality measures
+eigenvector_centrality <- eigen_centrality(ByAbs)$vector
+
+# The cluster_louvain function is used to detect communities within the network.
+communities <- cluster_louvain(ByAbs)
+
+# Plot with features highlighted
+plot(ByAbs,
+     vertex.size = eigenvector_centrality * 60,  # Adjust size based on degree centrality
+     vertex.color = membership(communities),  # Color nodes by community membership
+     vertex.label.color = "black",
+     vertex.label.cex = 0.8,
+     edge.width = E(ByAbs)$weight,  # Adjust edge width based on connection strength
+     main = "Document Network with Centrality and Communities")
+
+# Add legends
+legend("topright", legend = levels(factor(membership(communities))), col = 1:max(membership(communities)), pch = 19, title = "Communities")
+legend("bottomleft", legend = c("Node Size = Degree Centrality", "Edge Width = Connection Strength"), bty = "n")
+
