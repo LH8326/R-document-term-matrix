@@ -1,0 +1,80 @@
+# set working directory to desktop
+setwd(file.path("C:", "Users", "name", "Desktop", "projname", "foldername", "projtitle"))
+
+# clean up the environment before starting
+rm(list = ls())
+library(slam)
+library(tm)
+library(SnowballC)
+library(proxy)
+library(igraph)
+library(igraphdata)
+
+# Get file path to folder "test" where the documents are located
+cname = file.path(".", "corpus")
+cname
+print(dir(cname))
+docs = Corpus(DirSource((cname)))
+print(summary(docs))
+
+# Tokenisation
+docs <- tm_map(docs, content_transformer(tolower))
+docs <- tm_map(docs, removeNumbers)
+docs <- tm_map(docs, removePunctuation)
+docs <- tm_map(docs, removeWords, stopwords("english"))
+docs <- tm_map(docs, stripWhitespace)
+
+# Stem the documents
+docs <- tm_map(docs, stemDocument, language = "english")
+
+# Create document term matrix
+dtm <- DocumentTermMatrix(docs)
+inspect(dtm[1:15, 1:4])
+freq <- colSums(as.matrix(dtm))
+length(freq)
+ord = order(freq)
+freq[head(ord)]
+freq[tail(ord)]
+head(table(freq), 10)
+tail(table(freq), 10)
+
+# Remove sparse terms
+dim(dtm)
+dtms <- removeSparseTerms(dtm, 0.6666)
+inspect(dtms)
+
+# Convert the document-term matrix to a binary matrix
+dtms = as.matrix(dtms)
+write.csv(dtms, "a3.csv")
+
+# Convert to binary matrix
+dtms_binary = (dtms > 0) + 0
+
+# Multiply binary matrix by its transpose to get term-term co-occurrence matrix
+term_co_matrix = t(dtms_binary) %*% dtms_binary
+
+# Make the leading diagonal zero
+diag(term_co_matrix) = 0
+
+# Create a graph from the adjacency matrix
+term_graph = graph_from_adjacency_matrix(term_co_matrix, mode = "undirected", weighted = TRUE)
+plot(term_graph)
+
+# Calculate centrality measures
+eigenvector_centrality <- eigen_centrality(term_graph)$vector
+
+# Detect communities within the network
+communities <- cluster_louvain(term_graph)
+
+# Plot with features highlighted
+plot(term_graph,
+     vertex.size = eigenvector_centrality * 60,  # Adjust size based on degree centrality
+     vertex.color = membership(communities),  # Color nodes by community membership
+     vertex.label.color = "black",
+     vertex.label.cex = 0.8,
+     edge.width = E(term_graph)$weight,  # Adjust edge width based on connection strength
+     main = "Term Network with Centrality and Communities")
+
+# Add legends
+legend("topright", legend = levels(factor(membership(communities))), col = 1:max(membership(communities)), pch = 19, title = "Communities")
+legend("bottomleft", legend = c("Node Size = Degree Centrality", "Edge Width = Connection Strength"), bty = "n")
