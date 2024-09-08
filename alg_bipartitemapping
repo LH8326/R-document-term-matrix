@@ -1,0 +1,76 @@
+# set working directory to desktop
+setwd(file.path("C:", "Users", "name", "Desktop", "projname", "foldername", "projtitle"))
+
+# clean up the environment before starting
+rm(list = ls())
+library(slam)
+library(tm)
+library(SnowballC)
+library(proxy)
+library(igraph)
+library(igraphdata)
+
+#Get file path to folder "test" where the documents are located
+cname = file.path(".", "corpus")
+cname
+print(dir(cname))
+docs = Corpus(DirSource((cname)))
+print(summary(docs))
+
+#Tokenisation
+docs <- tm_map(docs, removeNumbers)
+docs <- tm_map(docs, removePunctuation)
+docs <- tm_map(docs, content_transformer(tolower))
+
+#Filter words
+docs <- tm_map(docs, removeWords, stopwords("english"))
+docs <- tm_map(docs, content_transformer(tolower))
+
+# Remove stop words and white space
+docs <- tm_map(docs, stripWhitespace)
+
+# Stem
+docs <- tm_map(docs, stemDocument, language = "english")
+
+#Create document term matrix
+dtm <- DocumentTermMatrix(docs)
+inspect(dtm[1:15, 1:4])
+freq <- colSums(as.matrix(dtm))
+length(freq)
+ord = order(freq)
+freq[head(ord)]
+freq[tail(ord)]
+head(table(freq), 10)
+tail(table(freq), 10)
+
+dim(dtm)
+dtms <- removeSparseTerms(dtm, 0.6666)
+inspect(dtms)
+
+dtms = as.matrix(dtms)
+
+# start with document term matrix dtms
+dtmsa = as.data.frame(dtms) # clone dtms
+dtmsa$ABS = rownames(dtmsa) # add row names
+
+dtmsb = data.frame()
+for (i in 1:nrow(dtmsa)){ for (j in 1:(ncol(dtmsa)-1)){
+    touse = cbind(dtmsa[i,j], dtmsa[i,ncol(dtmsa)], colnames(dtmsa[j]))
+    dtmsb = rbind(dtmsb, touse ) } } # close loops
+
+colnames(dtmsb) = c("documentname", "token", "weight")
+dtmsc = dtmsb[dtmsb$weight != 0,] # delete 0 weights
+
+# put colunms in order: abs, token, weight
+dtmsc = dtmsc[,c(2,3,1)]
+table(dtmsc)
+
+# create graph object and declare bipartite
+g <- graph.data.frame(dtmsc, directed=FALSE)
+bipartite.mapping(g)
+
+V(g)$type <- bipartite_mapping(g)$type
+V(g)$color <- ifelse(V(g)$type, "lightgreen", "pink")
+V(g)$shape <- ifelse(V(g)$type, "circle", "square")
+E(g)$color <- "lightgray"
+plot(g)
